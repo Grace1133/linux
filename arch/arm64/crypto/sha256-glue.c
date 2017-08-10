@@ -23,8 +23,8 @@ MODULE_LICENSE("GPL v2");
 MODULE_ALIAS_CRYPTO("sha224");
 MODULE_ALIAS_CRYPTO("sha256");
 
-asmlinkage void sha256_block_data_order(u32 *digest, const void *data,
-					unsigned int num_blks);
+asmlinkage void sha256_block_data_order(struct sha256_state *sst, u8 const *src,
+					int blocks);
 EXPORT_SYMBOL(sha256_block_data_order);
 
 asmlinkage void sha256_block_neon(u32 *digest, const void *data,
@@ -33,18 +33,15 @@ asmlinkage void sha256_block_neon(u32 *digest, const void *data,
 static int crypto_sha256_arm64_update(struct shash_desc *desc, const u8 *data,
 				      unsigned int len)
 {
-	return sha256_base_do_update(desc, data, len,
-				(sha256_block_fn *)sha256_block_data_order);
+	return sha256_base_do_update(desc, data, len, sha256_block_data_order);
 }
 
 static int crypto_sha256_arm64_finup(struct shash_desc *desc, const u8 *data,
 				     unsigned int len, u8 *out)
 {
 	if (len)
-		sha256_base_do_update(desc, data, len,
-				(sha256_block_fn *)sha256_block_data_order);
-	sha256_base_do_finalize(desc,
-				(sha256_block_fn *)sha256_block_data_order);
+		sha256_base_do_update(desc, data, len, sha256_block_data_order);
+	sha256_base_do_finalize(desc, sha256_block_data_order);
 
 	return sha256_base_finish(desc, out);
 }
@@ -87,7 +84,7 @@ static int sha256_update_neon(struct shash_desc *desc, const u8 *data,
 
 	if (!crypto_simd_usable())
 		return sha256_base_do_update(desc, data, len,
-				(sha256_block_fn *)sha256_block_data_order);
+				sha256_block_data_order);
 
 	while (len > 0) {
 		unsigned int chunk = len;
@@ -118,9 +115,8 @@ static int sha256_finup_neon(struct shash_desc *desc, const u8 *data,
 	if (!crypto_simd_usable()) {
 		if (len)
 			sha256_base_do_update(desc, data, len,
-				(sha256_block_fn *)sha256_block_data_order);
-		sha256_base_do_finalize(desc,
-				(sha256_block_fn *)sha256_block_data_order);
+				sha256_block_data_order);
+		sha256_base_do_finalize(desc, sha256_block_data_order);
 	} else {
 		if (len)
 			sha256_update_neon(desc, data, len);
