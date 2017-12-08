@@ -192,9 +192,30 @@ extern bool initcall_debug;
 	    ".long	" #fn " - .			\n"	\
 	    ".previous					\n");
 #else
-#define ___define_initcall(fn, id, __sec) \
+#ifdef CONFIG_LTO_CLANG
+  /*
+   * With LTO, the compiler doesn't necessarily obey link order for
+   * initcalls, and the initcall variable needs to be globally unique
+   * to avoid naming collisions.  In order to preserve the correct
+   * order, we add each variable into its own section and generate a
+   * linker script (in scripts/link-vmlinux.sh) to ensure the order
+   * remains correct.  We also add a __COUNTER__ prefix to the name,
+   * so we can retain the order of initcalls within each compilation
+   * unit, and __LINE__ to make the names more unique.
+   */
+  #define ___initcall_name2(c, l, fn, id) __initcall_##c##_##l##_##fn##id
+  #define ___initcall_name1(c, l, fn, id) ___initcall_name2(c, l, fn, id)
+  #define __initcall_name(fn, id) \
+		___initcall_name1(__COUNTER__, __LINE__, fn, id)
+
+  #define ___define_initcall(fn, id, __sec) \
+	static initcall_t __initcall_name(fn, id) __used \
+		__attribute__((__section__(#__sec ".init.." #fn))) = fn;
+#else
+  #define ___define_initcall(fn, id, __sec) \
 	static initcall_t __initcall_##fn##id __used \
 		__attribute__((__section__(#__sec ".init"))) = fn;
+#endif
 #endif
 
 #define __define_initcall(fn, id) ___define_initcall(fn, id, .initcall##id)
